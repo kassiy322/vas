@@ -332,7 +332,8 @@
   async function fetchDoc(url) {
     const { maxRetries } = readSettings();
 
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
+    let attemptsUsed = 0;
+    while (attemptsUsed < maxRetries) {
       if (aborted) return null;
 
       let response;
@@ -347,7 +348,8 @@
           },
         });
       } catch (err) {
-        setStatus(`Сетевая ошибка (попытка ${attempt+1}/${maxRetries}): ${err.message}`, 'warn');
+        attemptsUsed++;
+        setStatus(`Сетевая ошибка (попытка ${attemptsUsed}/${maxRetries}): ${err.message}`, 'warn');
         await sleep(randDelay());
         continue;
       }
@@ -356,13 +358,19 @@
       if (response.status === 429 || response.status === 403) {
         setStatus(`HTTP ${response.status} — блокировка…`, 'warn');
         await waitForCaptcha();
+        if (aborted) return null;
         await sleep(1500);
-        attempt--; // не считаем как попытку
         continue;
       }
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        attemptsUsed++;
+        if (attemptsUsed >= maxRetries) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        setStatus(`HTTP ${response.status} (попытка ${attemptsUsed}/${maxRetries})`, 'warn');
+        await sleep(randDelay());
+        continue;
       }
 
       const html = await response.text();
@@ -372,8 +380,8 @@
       if (isCaptchaHtml(html) && !hasResultMarkers(doc)) {
         setStatus('Капча в ответе…', 'warn');
         await waitForCaptcha();
+        if (aborted) return null;
         await sleep(1500);
-        attempt--;
         continue;
       }
 
@@ -388,7 +396,9 @@
     const data = { '№': index + 1 };
 
     // Название и ссылка на профиль
-    const nameLink = el.querySelector('a.supplier-link-\\d+, a[href*="/profiles/"]');
+    const profileHrefLink = el.querySelector('a[href*="/profiles/"]');
+    const subdomainLink = el.querySelector('a[href*=".supl.biz/"]');
+    const nameLink = profileHrefLink || subdomainLink;
     const nameDiv  = el.querySelector('.a_-zyjFuVn.a_OxpZyFuu');
 
     if (nameLink) {
@@ -400,7 +410,7 @@
 
     // Альтернативный поиск ссылки
     if (!data['Ссылка профиль']) {
-      const anyProfileLink = el.querySelector('a[href*="/profiles/"]');
+      const anyProfileLink = el.querySelector('a[href*="/profiles/"], a[href*=".supl.biz/"]');
       if (anyProfileLink) {
         data['Ссылка профиль'] = new URL(anyProfileLink.getAttribute('href'), location.href).href;
         if (!data['Название']) data['Название'] = norm(anyProfileLink.textContent);
@@ -564,11 +574,44 @@
     // https://supl.biz/profiles/h-9RJYbLBOyg   → добавляем /about/
     try {
       const u = new URL(profileUrl);
-      let base = u.href.replace(/\/$/, '');
-      return base + '/about/';
+      const cleanPath = u.pathname.replace(/\/+$/, '');
+      if (cleanPath.startsWith('/profiles/')) {
+        return `${u.origin}${cleanPath}/about/`;
+      }
+      if (u.hostname.endsWith('.supl.biz')) {
+        return `${u.origin}/about/`;
+      }
+      return `${u.origin}${cleanPath || ''}/about/`;
     } catch {
       return profileUrl + '/about/';
     }
+  }
+
+  async function resolveAboutCandidates(profileUrl) {
+    const candidates = [];
+    const primary = buildAboutUrl(profileUrl);
+    candidates.push(primary);
+
+    try {
+      const u = new URL(profileUrl);
+      if (u.hostname === 'supl.biz' && u.pathname.startsWith('/profiles/')) {
+        const resp = await fetch(profileUrl, {
+          method: 'GET',
+          credentials: 'include',
+          cache: 'no-store',
+          redirect: 'follow',
+        });
+        const finalUrl = new URL(resp.url || profileUrl);
+        if (finalUrl.hostname.endsWith('.supl.biz')) {
+          const alt = `${finalUrl.origin}/about/`;
+          if (!candidates.includes(alt)) candidates.push(alt);
+        }
+      }
+    } catch (_) {
+      // fallback остаётся только на primary
+    }
+
+    return candidates;
   }
 
   // ─────────── ОБРАБОТКА ОДНОЙ КОМПАНИИ ───────────
@@ -578,19 +621,28 @@
       return { ...listData, 'Статус': 'Нет ссылки' };
     }
 
-    const aboutUrl = buildAboutUrl(listData['Ссылка профиль']);
     setStatus(`[${index+1}/${total}] ${name}`);
 
     try {
-      const doc = await fetchDoc(aboutUrl);
-      if (!doc || aborted) return null;
+      const aboutCandidates = await resolveAboutCandidates(listData['Ссылка профиль']);
+      let lastError = null;
 
-      const aboutData = parseAboutPage(doc, aboutUrl);
-      return {
-        ...listData,
-        ...aboutData,
-        'Статус': 'OK',
-      };
+      for (const aboutUrl of aboutCandidates) {
+        try {
+          const doc = await fetchDoc(aboutUrl);
+          if (!doc || aborted) return null;
+          const aboutData = parseAboutPage(doc, aboutUrl);
+          return {
+            ...listData,
+            ...aboutData,
+            'Статус': 'OK',
+          };
+        } catch (err) {
+          lastError = err;
+        }
+      }
+
+      throw lastError || new Error('Не удалось открыть ни один вариант /about/');
     } catch (err) {
       return { ...listData, 'Статус': 'Ошибка', 'Ошибка': err.message };
     }
@@ -738,7 +790,11 @@
       setTimeout(() => {
         if (running) return;
         setRunning(true);
-        runParser(true);
+        runParser(true).catch((err) => {
+          setStatus(`Критическая ошибка: ${err.message}`, 'error');
+          setRunning(false);
+          setDot('');
+        });
       }, 800);
     } else if (savedState.waitingCaptcha) {
       setStatus('Парсер ждёт — пройдите проверку и нажмите кнопку.', 'warn');
@@ -759,7 +815,11 @@
     setDot('running');
     btnCaptcha.style.display = 'none';
     stopCaptchaTimer();
-    runParser(resume);
+    runParser(resume).catch((err) => {
+      setStatus(`Критическая ошибка: ${err.message}`, 'error');
+      setRunning(false);
+      setDot('');
+    });
   });
 
   btnStop.addEventListener('click', () => {
@@ -780,7 +840,11 @@
 
     if (!running) {
       setRunning(true);
-      runParser(true);
+      runParser(true).catch((err) => {
+        setStatus(`Критическая ошибка: ${err.message}`, 'error');
+        setRunning(false);
+        setDot('');
+      });
     }
   });
 
