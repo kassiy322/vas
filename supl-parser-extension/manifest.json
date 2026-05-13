@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Supl.biz Parser",
+  "version": "2.0",
+  "description": "Парсер поставщиков с supl.biz — контакты, описания, товары",
+  "permissions": [
+    "downloads",
+    "storage",
+    "webNavigation",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://supl.biz/*",
+    "https://*.supl.biz/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://supl.biz/*",
+        "https://*.supl.biz/*"
+      ],
+      "js": ["content.js"],
+      "css": ["panel.css"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}

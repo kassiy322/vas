@@ -1,0 +1,227 @@
+/* ============================================================
+   Supl.biz Parser — панель
+   ============================================================ */
+
+#spl-panel {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 2147483647;
+  width: 320px;
+  background: #141414;
+  border: 1px solid #2c2c2c;
+  border-radius: 12px;
+  padding: 14px 14px 12px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  font-size: 12px;
+  color: #d0d0d0;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04);
+  user-select: none;
+  transition: opacity .2s;
+}
+
+#spl-panel.spl-minimized #spl-body {
+  display: none;
+}
+
+/* --- Шапка --- */
+#spl-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  cursor: move;
+}
+
+#spl-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: .03em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#spl-title-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4a90d9;
+  flex-shrink: 0;
+  transition: background .3s;
+}
+#spl-title-dot.running { background: #4caf7d; animation: spl-pulse 1.2s infinite; }
+#spl-title-dot.captcha { background: #f0a500; animation: spl-pulse .7s infinite; }
+#spl-title-dot.error   { background: #e05555; }
+
+@keyframes spl-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .35; }
+}
+
+#spl-minimize {
+  font-size: 14px;
+  color: #555;
+  cursor: pointer;
+  padding: 0 3px;
+  line-height: 1;
+  transition: color .15s;
+}
+#spl-minimize:hover { color: #aaa; }
+
+/* --- Статус --- */
+#spl-status {
+  background: #0e0e0e;
+  border: 1px solid #252525;
+  border-radius: 7px;
+  padding: 7px 9px;
+  min-height: 34px;
+  font-size: 11.5px;
+  color: #888;
+  line-height: 1.5;
+  margin-bottom: 8px;
+  word-break: break-word;
+  transition: border-color .2s, color .2s;
+}
+#spl-status.warn    { color: #f0a500; border-color: #4a2e00; }
+#spl-status.error   { color: #e05555; border-color: #4a1111; }
+#spl-status.success { color: #4caf7d; border-color: #1a3f2a; }
+
+/* --- Прогресс --- */
+#spl-progress-wrap {
+  height: 3px;
+  background: #252525;
+  border-radius: 2px;
+  margin-bottom: 4px;
+  display: none;
+}
+#spl-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #3a78c9, #4caf7d);
+  width: 0%;
+  border-radius: 2px;
+  transition: width .4s;
+}
+#spl-progress-label {
+  font-size: 10px;
+  color: #555;
+  text-align: right;
+  margin-bottom: 8px;
+  display: none;
+}
+
+/* --- Капча таймер --- */
+#spl-captcha-timer {
+  display: none;
+  background: #1e1500;
+  border: 1px solid #5a3a00;
+  border-radius: 7px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: #f0a500;
+  line-height: 1.5;
+}
+#spl-captcha-timer b {
+  font-size: 20px;
+  display: block;
+  text-align: center;
+  font-weight: 700;
+  letter-spacing: .05em;
+}
+
+/* --- Настройки --- */
+.spl-row {
+  display: grid;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 7px;
+  font-size: 11px;
+  color: #777;
+}
+
+.spl-row-label {
+  font-size: 10.5px;
+  color: #666;
+  white-space: nowrap;
+}
+
+#spl-delay-row    { grid-template-columns: auto 52px 10px 52px; }
+#spl-concur-row   { grid-template-columns: auto 52px; }
+#spl-retries-row  { grid-template-columns: auto 52px; }
+#spl-cwait-row    { grid-template-columns: auto 52px 10px 52px; }
+#spl-auto-row     { grid-template-columns: 1fr; }
+
+#spl-auto-row label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: #777;
+}
+#spl-auto-row input[type="checkbox"] { margin: 0; accent-color: #4a90d9; }
+
+.spl-sep {
+  height: 1px;
+  background: #222;
+  margin: 8px 0;
+}
+
+input.spl-num {
+  width: 100%;
+  box-sizing: border-box;
+  background: #0e0e0e;
+  border: 1px solid #2c2c2c;
+  border-radius: 5px;
+  color: #d0d0d0;
+  padding: 4px 3px;
+  font: inherit;
+  font-size: 11px;
+  text-align: center;
+  transition: border-color .15s;
+}
+input.spl-num:focus { outline: none; border-color: #4a90d9; }
+
+/* --- Кнопки --- */
+#spl-btn-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+#spl-panel button {
+  flex: 1;
+  padding: 7px 0;
+  border: none;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity .15s, transform .1s;
+}
+#spl-panel button:active { transform: scale(.97); }
+#spl-panel button:disabled { opacity: .3; cursor: default; transform: none; }
+
+#spl-btn-start    { background: #2d6db5; color: #fff; }
+#spl-btn-start:not(:disabled):hover { background: #3a80cc; }
+#spl-btn-stop     { background: #282828; color: #bbb; }
+#spl-btn-stop:not(:disabled):hover { background: #333; }
+
+#spl-btn-captcha {
+  width: 100%;
+  margin-top: 7px;
+  background: #8a5500;
+  color: #fff;
+  padding: 8px 0;
+  border: none;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  display: none;
+  transition: background .15s;
+}
+#spl-btn-captcha:hover { background: #a86500; }
