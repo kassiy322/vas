@@ -221,7 +221,7 @@
 
   // ─────────── ДЕТЕКЦИЯ КАПЧИ ───────────
   function isCaptchaHtml(html) {
-    return /captcha|recaptcha|smartcaptcha|капч|я не робот|проверка безопасности|too many requests|слишком много/i.test(html);
+    return /captcha|recaptcha|smartcaptcha|капч|я не робот|проверка безопасности|too many requests|слишком много|too many pages|слишком много страниц/i.test(html);
   }
 
   function hasResultMarkers(doc) {
@@ -627,6 +627,23 @@
     return candidates;
   }
 
+  function extractAboutUrlFromProfileDoc(profileDoc, profileUrl) {
+    const byTab = profileDoc.querySelector('.a_TpJEX90v a[href*="/about/"]');
+    if (byTab?.getAttribute('href')) {
+      return new URL(byTab.getAttribute('href'), profileUrl).href;
+    }
+
+    const byText = [...profileDoc.querySelectorAll('a[href]')].find((a) => {
+      const txt = norm(a.textContent).toLowerCase();
+      return txt === 'о компании' || txt.includes('о компании');
+    });
+    if (byText?.getAttribute('href')) {
+      return new URL(byText.getAttribute('href'), profileUrl).href;
+    }
+
+    return buildAboutUrl(profileUrl);
+  }
+
   // ─────────── ОБРАБОТКА ОДНОЙ КОМПАНИИ ───────────
   async function processCompany(listData, index, total) {
     const name = listData['Название'] || `компания ${index+1}`;
@@ -637,21 +654,34 @@
     setStatus(`[${index+1}/${total}] ${name}`);
 
     try {
-      const aboutCandidates = await resolveAboutCandidates(listData['Ссылка профиль']);
+      const { maxRetries } = readSettings();
       let lastError = null;
 
-      for (const aboutUrl of aboutCandidates) {
+      for (let i = 0; i < maxRetries; i++) {
         try {
-          const doc = await fetchDoc(aboutUrl);
-          if (!doc || aborted) return null;
-          const aboutData = parseAboutPage(doc, aboutUrl);
-          return {
-            ...listData,
-            ...aboutData,
-            'Статус': 'OK',
-          };
+          // Шаг 1: как в Python-версии — сначала открываем профиль компании
+          const profileDoc = await fetchDoc(listData['Ссылка профиль']);
+          if (!profileDoc || aborted) return null;
+
+          // Шаг 2: из профиля берём ссылку вкладки "О компании"
+          const aboutFromProfile = extractAboutUrlFromProfileDoc(profileDoc, listData['Ссылка профиль']);
+          const aboutCandidates = [aboutFromProfile, ...(await resolveAboutCandidates(listData['Ссылка профиль']))]
+            .filter((v, idx, arr) => v && arr.indexOf(v) === idx);
+
+          for (const aboutUrl of aboutCandidates) {
+            const doc = await fetchDoc(aboutUrl);
+            if (!doc || aborted) return null;
+            const aboutData = parseAboutPage(doc, aboutUrl);
+            return {
+              ...listData,
+              ...aboutData,
+              'Статус': 'OK',
+            };
+          }
         } catch (err) {
           lastError = err;
+          setStatus(`Ретрай компании ${i + 1}/${maxRetries}: ${err.message}`, 'warn');
+          await sleep(randDelay());
         }
       }
 
