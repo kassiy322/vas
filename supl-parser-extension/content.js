@@ -587,6 +587,33 @@
     }
   }
 
+  async function resolveAboutCandidates(profileUrl) {
+    const candidates = [];
+    const primary = buildAboutUrl(profileUrl);
+    candidates.push(primary);
+
+    try {
+      const u = new URL(profileUrl);
+      if (u.hostname === 'supl.biz' && u.pathname.startsWith('/profiles/')) {
+        const resp = await fetch(profileUrl, {
+          method: 'GET',
+          credentials: 'include',
+          cache: 'no-store',
+          redirect: 'follow',
+        });
+        const finalUrl = new URL(resp.url || profileUrl);
+        if (finalUrl.hostname.endsWith('.supl.biz')) {
+          const alt = `${finalUrl.origin}/about/`;
+          if (!candidates.includes(alt)) candidates.push(alt);
+        }
+      }
+    } catch (_) {
+      // fallback остаётся только на primary
+    }
+
+    return candidates;
+  }
+
   // ─────────── ОБРАБОТКА ОДНОЙ КОМПАНИИ ───────────
   async function processCompany(listData, index, total) {
     const name = listData['Название'] || `компания ${index+1}`;
@@ -594,19 +621,28 @@
       return { ...listData, 'Статус': 'Нет ссылки' };
     }
 
-    const aboutUrl = buildAboutUrl(listData['Ссылка профиль']);
     setStatus(`[${index+1}/${total}] ${name}`);
 
     try {
-      const doc = await fetchDoc(aboutUrl);
-      if (!doc || aborted) return null;
+      const aboutCandidates = await resolveAboutCandidates(listData['Ссылка профиль']);
+      let lastError = null;
 
-      const aboutData = parseAboutPage(doc, aboutUrl);
-      return {
-        ...listData,
-        ...aboutData,
-        'Статус': 'OK',
-      };
+      for (const aboutUrl of aboutCandidates) {
+        try {
+          const doc = await fetchDoc(aboutUrl);
+          if (!doc || aborted) return null;
+          const aboutData = parseAboutPage(doc, aboutUrl);
+          return {
+            ...listData,
+            ...aboutData,
+            'Статус': 'OK',
+          };
+        } catch (err) {
+          lastError = err;
+        }
+      }
+
+      throw lastError || new Error('Не удалось открыть ни один вариант /about/');
     } catch (err) {
       return { ...listData, 'Статус': 'Ошибка', 'Ошибка': err.message };
     }
